@@ -1,0 +1,63 @@
+name: DestekTakipAPI CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  DOTNET_VERSION:      "9.0.x"
+  BUILD_CONFIGURATION: "Release"
+  TEST_PROJECT_PATH:   "tests/DestekTakipAPI.Tests/DestekTakipAPI.Tests.csproj"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    name: Build ve Test (.NET ${{ env.DOTNET_VERSION }})
+
+    steps:
+      - name: Kaynak kodu checkout et
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: .NET SDK kur
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: NuGet onbellegi yukle
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: NuGet restore
+        run: dotnet restore
+
+      - name: Projeyi derle
+        run: |
+          dotnet build \
+            --no-restore \
+            --configuration ${{ env.BUILD_CONFIGURATION }}
+
+      - name: xUnit testleri calistir
+        run: |
+          dotnet test ${{ env.TEST_PROJECT_PATH }} \
+            --no-build \
+            --configuration ${{ env.BUILD_CONFIGURATION }} \
+            --verbosity normal \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestSonuclari \
+            --logger "trx;LogFileName=test-sonuclari.trx"
+
+      - name: Test raporlarini artifact olarak yukle
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-sonuclari-${{ github.run_number }}
+          path: ./TestSonuclari
+          retention-days: 30
